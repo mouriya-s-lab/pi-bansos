@@ -11,6 +11,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
+import { tr } from "./i18n";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 // ── Configuration ──────────────────────────────────────────────────
@@ -324,7 +325,7 @@ async function deployVercelRelay(
 		"Content-Type": "application/json",
 	};
 	// 1. create deployment (3 inline files, no git repo)
-	onProgress?.("Uploading relay to Vercel…");
+	onProgress?.(tr("Uploading relay to Vercel…", "正在上传中继到 Vercel…"));
 	const dep = await fetch(`${VERCEL_API}/v13/deployments`, {
 		method: "POST",
 		headers: auth,
@@ -352,7 +353,8 @@ async function deployVercelRelay(
 			.json()
 			.catch(() => ({}) as { error?: { message?: string } });
 		throw new Error(
-			e?.error?.message || `Vercel deploy failed (HTTP ${dep.status})`,
+			e?.error?.message ||
+				`${tr("Vercel deploy failed", "Vercel 部署失败")} (HTTP ${dep.status})`,
 		);
 	}
 	const depJson = await dep.json();
@@ -365,7 +367,7 @@ async function deployVercelRelay(
 		body: JSON.stringify({ ssoProtection: null }),
 	});
 	// 3. poll until READY (3s interval, 120s timeout — same as 9Router)
-	onProgress?.("Waiting for deployment to go live…");
+	onProgress?.(tr("Waiting for deployment to go live…", "等待部署上线…"));
 	const deadline = Date.now() + 120_000;
 	while (Date.now() < deadline) {
 		const s = await fetch(`${VERCEL_API}/v13/deployments/${depId}`, {
@@ -374,10 +376,12 @@ async function deployVercelRelay(
 		const j = await s.json();
 		if (j.readyState === "READY") return `https://${j.url}`;
 		if (j.readyState === "ERROR" || j.readyState === "CANCELED")
-			throw new Error(`Deployment failed: ${j.readyState}`);
+			throw new Error(
+				`${tr("Deployment failed", "部署失败")}: ${j.readyState}`,
+			);
 		await new Promise((r) => setTimeout(r, 3000));
 	}
-	throw new Error("Deployment timed out (120s)");
+	throw new Error(tr("Deployment timed out (120s)", "部署超时（120 秒）"));
 }
 
 // ── Model Definitions ──────────────────────────────────────────────
@@ -1190,13 +1194,13 @@ function sharedProxy(): Promise<ProxyHandle> {
 function describeProxy(state: ProxyState): string {
 	switch (state.kind) {
 		case "idle":
-			return "proxy: not started";
+			return tr("proxy: not started", "代理：未启动");
 		case "starting":
-			return "proxy: starting";
+			return tr("proxy: starting", "代理：启动中");
 		case "listening":
-			return `proxy: ${HOST}:${state.handle.port}`;
+			return `${tr("proxy", "代理")}: ${HOST}:${state.handle.port}`;
 		case "failed":
-			return `proxy: bind failed (${state.error})`;
+			return `${tr("proxy: bind failed", "代理：绑定失败")} (${state.error})`;
 	}
 }
 
@@ -1207,9 +1211,11 @@ type StatusUi = {
 function statusText(transient?: string): string | undefined {
 	if (relayState.statusBar === "hidden") return undefined;
 	if (transient) return transient;
-	if (proxyState.kind === "failed") return "bansos: proxy down";
-	if (aliveCatalog.length === 0) return "bansos: no models";
-	return `relay: ${relayState.enabled ? "ON" : "OFF"}`;
+	if (proxyState.kind === "failed")
+		return tr("bansos: proxy down", "bansos：代理不可用");
+	if (aliveCatalog.length === 0)
+		return tr("bansos: no models", "bansos：没有可用模型");
+	return `${tr("relay", "中继")}: ${relayState.enabled ? tr("ON", "开启") : tr("OFF", "关闭")}`;
 }
 // `undefined` removes the entry, so hidden also clears a previous render.
 function renderStatus(ui: StatusUi | undefined, transient?: string): void {
@@ -1291,10 +1297,37 @@ export default async function (pi: ExtensionAPI) {
 
 	// ── /bansos command: toggle relay egress live (on|off|status|url [URL]) ───
 	pi.registerCommand("bansos", {
-		description:
+		description: tr(
 			"Relay egress: on | off | status | url [URL] | deploy | list | use <URL> | remove <URL> | hide | show (status bar)",
-		getArgumentCompletions: (prefix: string) =>
-			[
+			"中继出口：on | off | status | url [URL] | deploy | list | use <URL> | remove <URL> | hide | show（状态栏）",
+		),
+		getArgumentCompletions: (prefix: string) => {
+			const label = (command: string): string => {
+				switch (command) {
+					case "on":
+						return tr("on", "开启");
+					case "off":
+						return tr("off", "关闭");
+					case "status":
+						return tr("status", "状态");
+					case "url":
+						return "URL";
+					case "deploy":
+						return tr("deploy", "部署");
+					case "list":
+						return tr("list", "列表");
+					case "use":
+						return tr("use", "使用");
+					case "remove":
+						return tr("remove", "移除");
+					case "hide":
+						return tr("hide", "隐藏");
+					case "show":
+						return tr("show", "显示");
+				}
+				return command;
+			};
+			return [
 				"on",
 				"off",
 				"status",
@@ -1307,18 +1340,25 @@ export default async function (pi: ExtensionAPI) {
 				"show",
 			]
 				.filter((s) => s.startsWith(prefix))
-				.map((s) => ({ value: s, label: s })),
+				.map((value) => ({ value, label: label(value) }));
+		},
 		handler: async (args: string, ctx) => {
 			const parts = String(args || "")
 				.trim()
 				.split(/\s+/);
 			const sub = parts[0] || "";
 			const rest = parts.slice(1).join(" ");
-			const flash = () =>
-				ctx.ui.notify(
-					`Relay ${relayState.enabled ? "ON" : "OFF"}${relayState.enabled ? ` → ${relayState.url}` : " (direct)"} | hits=${relayHits} | saved=${relayState.relays.length}`,
-					"info",
-				);
+			const flash = () => {
+				const state = relayState.enabled ? tr("ON", "开启") : tr("OFF", "关闭");
+				const route = relayState.enabled
+					? ` → ${relayState.url}`
+					: ` ${tr("(direct)", "（直连）")}`;
+				const summary =
+					`${tr("Relay", "中继")} ${state}${route} | ` +
+					`${tr("hits", "请求")}=${relayHits} | ` +
+					`${tr("saved", "已保存")}=${relayState.relays.length}`;
+				ctx.ui.notify(summary, "info");
+			};
 			// The state file is the source of truth and other pi processes write
 			// it too, so every change re-reads it, applies one mutation, writes it
 			// back, and only then adopts the result (which also drives routing).
@@ -1330,7 +1370,7 @@ export default async function (pi: ExtensionAPI) {
 				if (saved.ok) relayState = next;
 				else
 					ctx.ui.notify(
-						`Could not save ${RELAY_STATE_FILE}: ${saved.error}`,
+						`${tr("Could not save", "无法保存")} ${RELAY_STATE_FILE}: ${saved.error}`,
 						"error",
 					);
 				renderStatus(ctx.ui);
@@ -1341,8 +1381,13 @@ export default async function (pi: ExtensionAPI) {
 					commit((s) => {
 						s.statusBar = statusBar;
 					})
-				)
-					ctx.ui.notify(`bansos status bar ${statusBar}`, "info");
+				) {
+					const statusLabel = statusBar === "hidden" ? "已隐藏" : "已显示";
+					ctx.ui.notify(
+						`${tr("bansos status bar", "bansos 状态栏")} ${tr(statusBar, statusLabel)}`,
+						"info",
+					);
+				}
 			};
 			// mutate in place so the saved-relays list is preserved across switches
 			const setRelay = (
@@ -1359,42 +1404,63 @@ export default async function (pi: ExtensionAPI) {
 				// Token prompted (not stored). pi's input has no secret mode — shows while typing.
 				const defaultName = `relay-${Date.now().toString(36)}`;
 				const token = (
-					await ctx.ui.input("Vercel API token (vercel-…):", "")
+					await ctx.ui.input(
+						tr("Vercel API token (vercel-…):", "Vercel API 令牌（vercel-…）："),
+						"",
+					)
 				)?.trim();
 				if (!token) {
-					ctx.ui.notify("Deploy cancelled — no token", "warning");
+					ctx.ui.notify(
+						tr("Deploy cancelled — no token", "部署已取消：未提供令牌"),
+						"warning",
+					);
 					return;
 				}
 				const name =
 					(
-						await ctx.ui.input("Project name (empty = auto):", defaultName)
+						await ctx.ui.input(
+							tr("Project name (empty = auto):", "项目名称（留空自动生成）："),
+							defaultName,
+						)
 					)?.trim() || defaultName;
-				renderStatus(ctx.ui, "deploying relay…");
+				renderStatus(ctx.ui, tr("deploying relay…", "正在部署中继…"));
 				try {
 					const url = await deployVercelRelay(token, name, (m) =>
 						ctx.ui.notify(m, "info"),
 					);
 					if (commit((s) => setRelay(s, true, url, `deployed ${name}`)))
-						ctx.ui.notify(`✓ Deployed & active: ${url}`, "info");
+						ctx.ui.notify(
+							`${tr("✓ Deployed & active:", "✓ 已部署并启用：")} ${url}`,
+							"info",
+						);
 					else
 						ctx.ui.notify(
-							`Deployed ${url} but not saved — run /bansos use ${url} once the state file is writable`,
+							tr(
+								`Deployed ${url} but not saved — run /bansos use ${url} once the state file is writable`,
+								`已部署 ${url}，但未保存——状态文件可写后运行 /bansos use ${url}`,
+							),
 							"warning",
 						);
 				} catch (e) {
 					renderStatus(ctx.ui);
-					ctx.ui.notify(`Deploy failed: ${(e as Error).message}`, "error");
+					ctx.ui.notify(
+						`${tr("Deploy failed", "部署失败")}: ${(e as Error).message}`,
+						"error",
+					);
 				}
 			};
 			const switchRelay = async () => {
 				if (!relayState.relays.length) {
-					ctx.ui.notify("No saved relays yet", "warning");
+					ctx.ui.notify(
+						tr("No saved relays yet", "尚无已保存的中继"),
+						"warning",
+					);
 					return;
 				}
 				const fmt = (r: KnownRelay) =>
 					`${r.url === relayState.url ? "★ " : "  "}${r.url}${r.label ? `  (${r.label})` : ""}`;
 				const opts = relayState.relays.map(fmt);
-				const choice = await ctx.ui.select("Switch relay", opts);
+				const choice = await ctx.ui.select(tr("Switch relay", "切换中继"), opts);
 				if (!choice) return;
 				const match = relayState.relays.find((r) => fmt(r) === choice);
 				if (!match) return;
@@ -1402,7 +1468,7 @@ export default async function (pi: ExtensionAPI) {
 			};
 			const showList = () => {
 				if (!relayState.relays.length) {
-					ctx.ui.notify("No saved relays", "info");
+					ctx.ui.notify(tr("No saved relays", "没有已保存的中继"), "info");
 					return;
 				}
 				const lines = relayState.relays.map(
@@ -1410,7 +1476,10 @@ export default async function (pi: ExtensionAPI) {
 						`${r.url === relayState.url ? "★" : " "} ${r.url}${r.label ? `  [${r.label}]` : ""}`,
 				);
 				ctx.ui.notify(
-					`Saved relays (${relayState.relays.length}):\n${lines.join("\n")}`,
+					tr(
+						`Saved relays (${relayState.relays.length}):\n${lines.join("\n")}`,
+						`已保存的中继（${relayState.relays.length}）：\n${lines.join("\n")}`,
+					),
 					"info",
 				);
 			};
@@ -1420,19 +1489,28 @@ export default async function (pi: ExtensionAPI) {
 				);
 				if (!removable.length) {
 					ctx.ui.notify(
-						"Nothing to remove — the active relay can't be removed (switch first)",
+						tr(
+							"Nothing to remove — the active relay can't be removed (switch first)",
+							"没有可移除的项目——无法移除当前中继（请先切换）",
+						),
 						"warning",
 					);
 					return;
 				}
 				const fmt = (r: KnownRelay) =>
 					`${r.url}${r.label ? `  (${r.label})` : ""}`;
-				const choice = await ctx.ui.select("Remove relay", removable.map(fmt));
+				const choice = await ctx.ui.select(
+					tr("Remove relay", "移除中继"),
+					removable.map(fmt),
+				);
 				if (!choice) return;
 				const match = removable.find((r) => fmt(r) === choice);
 				if (!match) return;
 				if (commit((s) => removeRelay(s, match.url)))
-					ctx.ui.notify(`Removed: ${match.url}`, "info");
+					ctx.ui.notify(
+						`${tr("Removed:", "已移除：")} ${match.url}`,
+						"info",
+					);
 			};
 
 			if (sub === "on") {
@@ -1448,10 +1526,22 @@ export default async function (pi: ExtensionAPI) {
 			} else if (sub === "status") {
 				ctx.ui.notify(
 					[
-						`Relay ${relayState.enabled ? `ON → ${relayState.url}` : "OFF (direct)"} | hits=${relayHits} | saved=${relayState.relays.length}`,
+						`${tr("Relay", "中继")} ${
+							relayState.enabled
+								? `${tr("ON", "开启")} → ${relayState.url}`
+								: tr("OFF (direct)", "关闭（直连）")
+						} | ${tr("hits", "请求")}=${relayHits} | ${tr("saved", "已保存")}=${relayState.relays.length}`,
 						describeProxy(proxyState),
-						`models found at startup: ${aliveCatalog.length}${aliveCatalog.length === 0 ? " (restart to re-check)" : ""}`,
-						`status bar: ${relayState.statusBar}`,
+						`${tr("models found at startup", "启动时发现的模型")}: ${aliveCatalog.length}${
+							aliveCatalog.length === 0
+								? ` ${tr("(restart to re-check)", "（重启以重新检查）")}`
+								: ""
+						}`,
+						`${tr("status bar", "状态栏")}: ${
+							relayState.statusBar === "shown"
+								? tr("shown", "已显示")
+								: tr("hidden", "已隐藏")
+						}`,
 					].join("\n"),
 					proxyState.kind === "failed" || aliveCatalog.length === 0
 						? "warning"
@@ -1466,42 +1556,45 @@ export default async function (pi: ExtensionAPI) {
 			} else if (sub === "use") {
 				const url = (
 					rest ||
-					(await ctx.ui.input("Relay URL to activate:", "")) ||
+					(await ctx.ui.input(tr("Relay URL to activate:", "要启用的中继 URL："), "")) ||
 					""
 				).trim();
 				if (!url) {
-					ctx.ui.notify("No URL given", "warning");
+					ctx.ui.notify(tr("No URL given", "未提供 URL"), "warning");
 					return;
 				}
 				if (commit((s) => setRelay(s, true, url, "manual"))) flash();
 			} else if (sub === "remove") {
 				const url = (
 					rest ||
-					(await ctx.ui.input("Relay URL to remove:", "")) ||
+					(await ctx.ui.input(tr("Relay URL to remove:", "要移除的中继 URL："), "")) ||
 					""
 				).trim();
 				if (!url) {
-					ctx.ui.notify("No URL given", "warning");
+					ctx.ui.notify(tr("No URL given", "未提供 URL"), "warning");
 					return;
 				}
 				if (url === relayState.url) {
 					ctx.ui.notify(
-						"Can't remove the active relay — switch first",
+						tr(
+							"Can't remove the active relay — switch first",
+							"无法移除当前中继——请先切换",
+						),
 						"warning",
 					);
 					return;
 				}
 				if (!relayState.relays.some((r) => r.url === url)) {
-					ctx.ui.notify("Not in saved list", "warning");
+					ctx.ui.notify(tr("Not in saved list", "不在已保存列表中"), "warning");
 					return;
 				}
 				if (commit((s) => removeRelay(s, url)))
-					ctx.ui.notify(`Removed: ${url}`, "info");
+					ctx.ui.notify(`${tr("Removed:", "已移除：")} ${url}`, "info");
 			} else if (sub === "url") {
 				const input =
 					rest ||
 					(await ctx.ui.input(
-						"Relay URL (empty = default):",
+						tr("Relay URL (empty = default):", "中继 URL（留空使用默认值）："),
 						relayState.url || DEFAULT_RELAY_URL,
 					));
 				if (
@@ -1520,36 +1613,46 @@ export default async function (pi: ExtensionAPI) {
 			} else {
 				const statusBarItem =
 					relayState.statusBar === "shown"
-						? "Hide status bar"
-						: "Show status bar";
-				const choice = await ctx.ui.select("bansos relay", [
-					`Relay: ${relayState.enabled ? "ON" : "OFF"} → ${relayState.url || "direct"}`,
-					"Turn ON",
-					"Turn OFF",
-					"Switch relay…",
-					"Remove relay…",
-					"Set URL",
-					"Deploy Vercel relay…",
-					"List saved relays",
+						? tr("Hide status bar", "隐藏状态栏")
+						: tr("Show status bar", "显示状态栏");
+				const turnOn = tr("Turn ON", "开启中继");
+				const turnOff = tr("Turn OFF", "关闭中继");
+				const switchItem = tr("Switch relay…", "切换中继…");
+				const removeItem = tr("Remove relay…", "移除中继…");
+				const setUrlItem = tr("Set URL", "设置 URL");
+				const deployItem = tr("Deploy Vercel relay…", "部署 Vercel 中继…");
+				const listItem = tr("List saved relays", "列出已保存的中继");
+				const relayItem = relayState.enabled
+					? `${tr("Relay", "中继")}: ${tr("ON", "开启")} → ${relayState.url || tr("direct", "直连")}`
+					: `${tr("Relay", "中继")}: ${tr("OFF", "关闭")} → ${relayState.url || tr("direct", "直连")}`;
+				const choice = await ctx.ui.select(tr("bansos relay", "bansos 中继"), [
+					relayItem,
+					turnOn,
+					turnOff,
+					switchItem,
+					removeItem,
+					setUrlItem,
+					deployItem,
+					listItem,
 					statusBarItem,
 				]);
-				if (choice === "Turn ON") {
+				if (choice === turnOn) {
 					if (commit((s) => setRelay(s, true, s.url || DEFAULT_RELAY_URL)))
 						flash();
-				} else if (choice === "Turn OFF") {
+				} else if (choice === turnOff) {
 					if (
 						commit((s) => {
 							s.enabled = false;
 						})
 					)
 						flash();
-				} else if (choice === "Switch relay…") {
+				} else if (choice === switchItem) {
 					await switchRelay();
-				} else if (choice === "Remove relay…") {
+				} else if (choice === removeItem) {
 					await removeRelayMenu();
-				} else if (choice === "Set URL") {
+				} else if (choice === setUrlItem) {
 					const input = await ctx.ui.input(
-						"Relay URL (empty = default):",
+						tr("Relay URL (empty = default):", "中继 URL（留空使用默认值）："),
 						relayState.url || DEFAULT_RELAY_URL,
 					);
 					if (
@@ -1563,14 +1666,14 @@ export default async function (pi: ExtensionAPI) {
 						)
 					)
 						flash();
-				} else if (choice === "Deploy Vercel relay…") {
+				} else if (choice === deployItem) {
 					await doDeploy();
-				} else if (choice === "List saved relays") {
+				} else if (choice === listItem) {
 					showList();
-				} else if (choice === "Hide status bar") {
-					setStatusBar("hidden");
-				} else if (choice === "Show status bar") {
-					setStatusBar("shown");
+				} else if (choice === statusBarItem) {
+					setStatusBar(
+						relayState.statusBar === "shown" ? "hidden" : "shown",
+					);
 				}
 			}
 		},

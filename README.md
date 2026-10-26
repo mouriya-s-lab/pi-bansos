@@ -142,7 +142,11 @@ pi   # or: omp
 
 Run `/bansos` any time to toggle relay egress or switch between saved relays (see [Relay](#relay-optional)).
 
-Startup is silent: loading the extension writes nothing to stdout/stderr, failures included. The TUI status bar shows `relay: ON`/`OFF`, or `bansos: proxy down` / `bansos: no models` when startup failed; `/bansos status` gives the details (proxy address or bind error, models found at startup). Hide or show the status-bar entry with `/bansos hide` / `/bansos show`.
+Startup is silent: loading the extension writes nothing to stdout/stderr, failures included. The TUI status bar shows `relay: ON`/`OFF` (or their translated equivalents), or `bansos: proxy down` / `bansos: no models` when startup failed; `/bansos status` gives the details (proxy address or bind error, models found at startup). Hide or show the status-bar entry with `/bansos hide` / `/bansos show`.
+
+## UI language
+
+The `/bansos` command's descriptions, completion labels, menus, prompts, notifications, deployment progress, and status-bar text follow the current UI language. Set `OMOMP_LANG=en` or `OMOMP_LANG=zh` (case-insensitive, with surrounding whitespace ignored) to choose explicitly. Without it, the first non-empty `LC_ALL`, `LC_MESSAGES`, or `LANG` selects Chinese when it starts with `zh`, otherwise English; English is the fallback. Command names, model names, URLs, and saved relay labels stay unchanged.
 
 Optional custom port:
 

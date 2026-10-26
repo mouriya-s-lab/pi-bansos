@@ -5,6 +5,8 @@
 ### Added
 - **`/bansos hide` / `/bansos show`** (and a menu item) toggle the `bansos` TUI status-bar entry. Saved as `statusBar` in `~/.pi/agent/pi-bansos-relay-state.json`; default shown.
 - `/bansos status` also reports the proxy address or bind error and the number of models found at startup.
+- `/bansos` UI text now follows the environment-selected English or Simplified Chinese language (`OMOMP_LANG`, then locale variables).
+- The status-bar entry, command metadata, prompts, menus, notifications, and deployment progress are localized without changing command values or provider/model names.
 
 ### Changed
 - Startup failures (no models found, proxy bind failure) no longer print on stderr; the status bar shows `bansos: proxy down` / `bansos: no models` and `/bansos status` has the detail. `BANSOS_DEBUG=1` prints them again.
