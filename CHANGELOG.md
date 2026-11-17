@@ -11,6 +11,7 @@
 ### Changed
 - Startup failures (no models found, proxy bind failure) no longer print on stderr; the status bar shows `bansos: proxy down` / `bansos: no models` and `/bansos status` has the detail. `BANSOS_DEBUG=1` prints them again.
 - Each `/bansos` change re-reads the state file when it saves, applies only that change, and writes atomically (temp file + rename), so it no longer overwrites settings another running pi/OMP process changed in the meantime with its stale copy. Saving creates `~/.pi/agent/` if missing; a failed save is reported and the change is not applied.
+- `/bansos deploy` masks the Vercel API token as `•` while you type in OMP's TUI (it was echoed in plain text). pi has no masked input and still shows it while typing. In ACP hosts the token prompt returns no value, so `/bansos deploy` cancels there with `Deploy cancelled — no token`.
 
 ### Fixed
 - **`MaxListenersExceededWarning: 11 listening listeners added to [Server]`** — the port bump registered a new `listening` callback per busy port; it now scans with one `listening`/`error` handler pair.

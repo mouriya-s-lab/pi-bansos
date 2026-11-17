@@ -205,7 +205,7 @@ Deploys your own Node.js relay to Vercel and activates it immediately. It asks f
   ✓ Deployed & active: https://relay-2026-xxx.vercel.app
 ```
 
-> The Vercel relay masks your IP behind Vercel's dynamic edge IPs. Free tier: 100 GB bandwidth + 500 K invocations/month. Deploy on multiple accounts for more IP diversity. The token input has no hidden/secret mode in the TUI, so it shows while typing — paste, deploy, done.
+> The Vercel relay masks your IP behind Vercel's dynamic edge IPs. Free tier: 100 GB bandwidth + 500 K invocations/month. Deploy on multiple accounts for more IP diversity. In OMP's TUI the token is masked as `•` while you type; pi has no masked input, so there it shows while typing — paste, deploy, done.
 
 > A relay is a single fixed exit IP, not rotation. Useful when your IP is limited; otherwise it just adds a small hop.
 
