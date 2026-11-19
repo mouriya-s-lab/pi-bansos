@@ -1401,12 +1401,13 @@ export default async function (pi: ExtensionAPI) {
 				if (s.url) ensureRelay(s, s.url, addLabel);
 			};
 			const doDeploy = async () => {
-				// Token prompted (not stored). pi's input has no secret mode — shows while typing.
+				// Token prompted (not stored). `secret` masks it in OMP's TUI; pi ignores the hint.
 				const defaultName = `relay-${Date.now().toString(36)}`;
 				const token = (
 					await ctx.ui.input(
 						tr("Vercel API token (vercel-…):", "Vercel API 令牌（vercel-…）："),
 						"",
+						{ secret: true },
 					)
 				)?.trim();
 				if (!token) {
